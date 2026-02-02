@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1e1b4b">
+    <title>Pro Ledger App</title>
+    
+    <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIlBybyBMZWRnZXIiLAogICJzaG9ydF9uYW1lIjogIkxlZGdlciIsCiAgInN0YXJ0X3VybCI6ICIuIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAiYmFja2dyb3VuZF9jb2xvciI6ICIjMGYxMDE2IiwKICAidGhlbWVfY29sb3IiOiAiIzFlMWI0YiIsCiAgImljb25zIjogWwogICAgewogICAgICAic3JjIjogImh0dHBzOi8vY2RuLWljb25zLXBuZy5mbGF0aWNvbi5jb20vNTEyLzI2MjIvMjYyMjA3NS5wbmciLAogICAgICAic2l6ZXMiOiAiNTEyeDUxMiIsCiAgICAgICJ0eXBlIjogImltYWdlL3BuZyIKICAgIH1hCiAgXQp9">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: #0f1016;
+            background: radial-gradient(circle at top right, #1e1b4b, #0f1016);
+            color: white;
+            min-height: 100vh;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .neo-input {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+        .install-btn {
+            display: none; /* Initially hidden */
+            background: #ffffff10;
+            border: 1px solid #ffffff20;
+        }
+    </style>
+</head>
+<body class="p-4">
+
+    <div id="installBanner" class="hidden fixed top-4 left-4 right-4 z-[100] glass-card p-4 rounded-2xl flex justify-between items-center animate-bounce">
+        <div class="flex items-center gap-3">
+            <div class="bg-pink-500 p-2 rounded-lg">📲</div>
+            <p class="text-xs font-bold">Install to Home Screen?</p>
+        </div>
+        <button id="btnInstall" class="bg-pink-600 px-4 py-2 rounded-xl text-xs font-bold uppercase">Install Now</button>
+    </div>
+
+    <div class="max-w-4xl mx-auto">
+        <header class="mb-8 mt-4 text-center">
+            <h1 class="text-3xl font-extrabold tracking-tight italic">PRO <span class="text-pink-500">LEDGER</span></h1>
+            <div class="glass-card mt-6 p-5 rounded-[2rem] inline-block min-w-[280px]">
+                <p class="text-[10px] uppercase tracking-[0.2em] text-gray-400">Total Balance</p>
+                <div id="grandTotal" class="text-4xl font-bold text-pink-500 mt-1">₹ 0.00</div>
+            </div>
+        </header>
+
+        <div id="entryContainer" class="space-y-4 mb-24"></div>
+
+        <div class="fixed bottom-6 left-0 right-0 px-6 z-50 flex flex-col gap-3">
+            <button onclick="addRow()" class="w-full max-w-md mx-auto block bg-gradient-to-r from-pink-600 to-purple-600 py-4 rounded-2xl font-bold shadow-2xl shadow-pink-500/30 flex items-center justify-center gap-2">
+                <span>+</span> ADD NEW ENTRY
+            </button>
+        </div>
+    </div>
+
+<script>
+    // --- PWA INSTALL LOGIC ---
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        document.getElementById('installBanner').classList.remove('hidden');
+    });
+
+    document.getElementById('btnInstall').addEventListener('click', async () => {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                document.getElementById('installBanner').classList.add('hidden');
+            }
+            deferredPrompt = null;
+        }
+    });
+
+    // --- SERVICE WORKER REGISTRATION ---
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('https://cdn.jsdelivr.net/npm/pwa-helper-components@0.2.1/pwa-helper-components.js').catch(() => {});
+        });
+    }
+
+    // --- CORE LOGIC ---
+    let transactions = JSON.parse(localStorage.getItem('ledger_v2')) || [];
+
+    function init() { render(); startTimers(); }
+
+    function addRow() {
+        transactions.unshift({ id: Date.now(), date: new Date().toISOString().split('T')[0], name: '', remark: '', amount: 0 });
+        save(); render();
+    }
+
+    function update(id, field, value) {
+        const index = transactions.findIndex(t => t.id === id);
+        transactions[index][field] = value;
+        save();
+        if(field === 'amount') calculateTotal();
+    }
+
+    function deleteRow(id) {
+        transactions = transactions.filter(t => t.id !== id);
+        save(); render();
+    }
+
+    function calculateTotal() {
+        const total = transactions.reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
+        document.getElementById('grandTotal').innerText = '₹ ' + total.toLocaleString('en-IN', {minimumFractionDigits: 2});
+    }
+
+    function save() { localStorage.setItem('ledger_v2', JSON.stringify(transactions)); }
+
+    function render() {
+        const container = document.getElementById('entryContainer');
+        container.innerHTML = '';
+        transactions.forEach(t => {
+            const card = document.createElement('div');
+            card.className = 'glass-card p-4 rounded-3xl relative overflow-hidden';
+            card.innerHTML = `
+                <div class="flex gap-3 items-center mb-3">
+                    <input type="date" value="${t.date}" onchange="update(${t.id}, 'date', this.value)" class="neo-input text-xs p-2 rounded-lg flex-1">
+                    <div id="timer-${t.id}" class="text-[10px] bg-pink-500/10 text-pink-400 px-3 py-1 rounded-full font-bold">Timer...</div>
+                    <button onclick="deleteRow(${t.id})" class="text-gray-500 p-1">✕</button>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <input type="text" placeholder="Name" value="${t.name}" oninput="update(${t.id}, 'name', this.value)" class="neo-input p-3 rounded-xl text-sm">
+                    <input type="number" placeholder="Amount" value="${t.amount}" oninput="update(${t.id}, 'amount', this.value)" class="neo-input p-3 rounded-xl text-sm font-bold text-green-400">
+                    <input type="text" placeholder="Remark" value="${t.remark}" oninput="update(${t.id}, 'remark', this.value)" class="neo-input p-3 rounded-xl text-sm col-span-2">
+                </div>
+            `;
+            container.appendChild(card);
+        });
+        calculateTotal();
+    }
+
+    function startTimers() {
+        setInterval(() => {
+            transactions.forEach(t => {
+                const display = document.getElementById(`timer-${t.id}`);
+                if (!display) return;
+                const diff = new Date(t.date).getTime() - new Date().getTime();
+                if (diff < 0) { display.innerHTML = "PASSED"; }
+                else {
+                    const d = Math.floor(diff / (1000*60*60*24));
+                    const h = Math.floor((diff % (1000*60*60*24)) / (1000*60*60));
+                    display.innerHTML = `${d}d ${h}h left`;
+                }
+            });
+        }, 5000);
+    }
+
+    init();
+</script>
+</body>
+</html>
